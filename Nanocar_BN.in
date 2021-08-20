@@ -1,0 +1,102 @@
+#Nanocar motion on BN layer
+
+#newton off
+#package gpu force 0 0 1
+#suffix gpu
+
+dimension		3
+boundary		p p f
+units       	metal
+atom_style		full
+###########READ DATA################################
+bond_style      harmonic
+angle_style     harmonic
+dihedral_style  opls
+read_data		Nanocar_BN.data
+
+####################################################
+variable 		t equal 400  			# Temperature
+neighbor 3 bin
+neigh_modify every 1 delay 5 check yes
+######################GROUPS########################
+group			B          type   4
+group			N          type   5
+group			Nanocar    type   1 2 3
+group           BN         union  B N
+
+######################POTENTIALS#####################
+pair_style	     hybrid tersoff lj/cut 13 
+pair_modify		 mix arithmetic
+special_bonds	 charmm
+
+pair_coeff	     * * tersoff  BNC.tersoff NULL  NULL  NULL  B  N  # tersoff   for BN
+pair_coeff	     1 1 lj/cut	  0.00203808  2.6727	#  H  H
+pair_coeff       1 2 lj/cut   0.001972    3.64695   #  H  C2 
+pair_coeff	     1 3 lj/cut	  0.001972    3.64695   #  H  CA 
+pair_coeff	     1 4 lj/cut	  0.0017069	  3.133     #  H  B    
+pair_coeff	     1 5 lj/cut	  0.0021086	  3.089     #  H  N      
+pair_coeff       2 2 lj/cut   0.001908	  3.460     #  C2 C2
+pair_coeff	     2 3 lj/cut	  0.001908	  3.460    	#  C2 CA
+pair_coeff	     2 4 lj/cut	  0.00329     3.411 	#  C2 B
+pair_coeff	     2 5 lj/cut	  0.00406     3.367 	#  C2 N 
+pair_coeff       3 3 lj/cut   0.001908 	  3.460     #  CA CA 
+pair_coeff       3 4 lj/cut   0.00329     3.411     #  CA B
+pair_coeff       3 5 lj/cut   0.00406     3.367     #  CA N
+
+###################INITIAL VELOCITY###################
+velocity	    Nanocar             create    $t   123456   mom yes dist gaussian
+velocity     	BN                  create    $t   123456   mom yes rot yes dist gaussian
+
+#####################FIX###############################
+fix				1 Nanocar        nvt  temp       $t   $t   0.05
+fix				2 BN             nvt  temp       $t   $t   0.05
+
+###################COMPUTES############################
+
+
+compute			Nanocar_temp        Nanocar         temp/com
+compute			BN_temp             BN              temp/com
+compute			Nanocar_ke          Nanocar			ke
+compute 		pe_atom_Nanocar		Nanocar         pe/atom
+compute			pe_Nanocar   		Nanocar     	reduce			sum		c_pe_atom_Nanocar
+compute			lennard 			Nanocar    		group/group		BN      boundary no 
+
+variable        xcm_x  equal xcm(Nanocar,x)
+variable        xcm_y  equal xcm(Nanocar,y)
+variable        xcm_z  equal xcm(Nanocar,z)
+
+variable        vcm_x  equal vcm(Nanocar,x)
+variable        vcm_y  equal vcm(Nanocar,y)
+variable        vcm_z  equal vcm(Nanocar,z)
+
+variable        xcm_x2  equal xcm(BN,x)
+variable        xcm_y2  equal xcm(BN,y)
+variable        xcm_z2  equal xcm(BN,z)
+
+variable        vcm_x2  equal vcm(BN,x)
+variable        vcm_y2  equal vcm(BN,y)
+variable        vcm_z2  equal vcm(BN,z)
+
+variable        wcm_x  equal omega(Nanocar,x)
+variable        wcm_y  equal omega(Nanocar,y)
+variable        wcm_z  equal omega(Nanocar,z)
+#################FIX_MODIFY###################################
+fix_modify      1  temp   Nanocar_temp
+fix_modify      2  temp   BN_temp
+#################THERMO-DUMP##################################
+thermo	     	100
+thermo_style  	custom step cpu c_Nanocar_temp c_BN_temp c_Nanocar_ke c_pe_Nanocar c_lennard v_xcm_x v_xcm_y v_xcm_z v_vcm_x v_vcm_y v_vcm_z v_xcm_x2 v_xcm_y2 v_xcm_z2 v_vcm_x2 v_vcm_y2 v_vcm_z2 v_wcm_x v_wcm_y v_wcm_z
+timestep     	0.001
+dump		    1 all xyz  3000 dump.xyz 
+dump_modify		1 element  H C C B N
+###########MINIMIZE-RLAX-RUN##################################
+
+minimize 		1.0e-6 1.0e-8 10000 100000
+reset_timestep	0
+
+run				100000
+
+
+reset_timestep	0
+run				10000000
+
